@@ -225,18 +225,23 @@ static void _mlme_set(gnrc_lorawan_t *mac, const mlme_request_t *mlme_request,
     case MIB_ACTIVATION_METHOD:
         if (mlme_request->mib.activation != MLME_ACTIVATION_OTAA) {
             mlme_confirm->status = GNRC_LORAWAN_REQ_STATUS_SUCCESS;
-            memcpy(&mac->dev_addr, mlme_request->mib.dev_addr,
-                   sizeof(uint32_t));
-            break;
-        case MIB_RX2_DR:
-            mlme_confirm->status = GNRC_LORAWAN_REQ_STATUS_SUCCESS;
-            gnrc_lorawan_set_rx2_dr(mac, mlme_request->mib.rx2_dr);
-            break;
-        case MIB_ADR:
-            mlme_confirm->status = gnrc_lorawan_set_adr(mac, mlme_request->mib.adr);
-            break;
-        default:
-            break;
+            mac->mlme.activation = mlme_request->mib.activation;
+        }
+        break;
+    case MIB_DEV_ADDR:
+        mlme_confirm->status = GNRC_LORAWAN_REQ_STATUS_SUCCESS;
+        memcpy(&mac->dev_addr, mlme_request->mib.dev_addr,
+               sizeof(uint32_t));
+        break;
+    case MIB_RX2_DR:
+        mlme_confirm->status = GNRC_LORAWAN_REQ_STATUS_SUCCESS;
+        gnrc_lorawan_set_rx2_dr(mac, mlme_request->mib.rx2_dr);
+        break;
+    case MIB_ADR:
+        mlme_confirm->status = gnrc_lorawan_set_adr(mac, mlme_request->mib.adr);
+        break;
+    default:
+        break;
     }
 }
 
@@ -254,7 +259,7 @@ static void _mlme_get(gnrc_lorawan_t *mac, const mlme_request_t *mlme_request,
             break;
         case MIB_ADR:
             mlme_confirm->status = GNRC_LORAWAN_REQ_STATUS_SUCCESS;
-            mlme_confirm->mib.adr = &mac->mlme.adr;
+            mlme_confirm->mib.adr = mac->mlme.adr;
             break;
         default:
             mlme_confirm->status = -EINVAL;
@@ -440,7 +445,7 @@ static int _mlme_link_adr_req(gnrc_lorawan_t *mac, const uint8_t *p, size_t len,
     return consumed_bytes;
 }
 
-int _fopts_mlme_link_adr_ans(gnrc_lorawan_t *mac, lorawan_buffer_t *buf)
+static int _fopts_mlme_link_adr_ans(gnrc_lorawan_t *mac, lorawan_buffer_t *buf)
 {
     for (uint8_t _count = mac->mlme.adr_req_cnt; buf && _count; _count--) {
         assert(buf->index + GNRC_LORAWAN_CID_LINK_ADR_ANS_SIZE <= buf->size);
@@ -464,14 +469,19 @@ static int _fopts_mlme_link_rekey_ind(lorawan_buffer_t *buf)
     return GNRC_LORAWAN_CID_SIZE + GNCR_LORAWAN_REKEY_IND_SIZE;
 }
 
-static void _mlme_rekey_check_conf(gnrc_lorawan_t *mac, uint8_t *p)
+static int _mlme_rekey_check_conf(gnrc_lorawan_t *mac, const uint8_t *p, size_t len, uint8_t index)
 {
+    (void)len;
+    (void)index;
+
     /* server version must by smaller or equal to device's LoRaWAN version */
     uint8_t server_minor = p[1];
 
     if (server_minor <= MINOR_LRWAN) {
         mac->mlme.pending_mlme_opts &= ~GNRC_LORAWAN_MLME_OPTS_REKEY_IND_REQ;
     }
+
+    return GNRC_LORAWAN_FOPT_REKEY_CONF_SIZE;
 }
 
 void gnrc_lorawan_process_fopts(gnrc_lorawan_t *mac, uint8_t *fopts,
@@ -496,6 +506,10 @@ void gnrc_lorawan_process_fopts(gnrc_lorawan_t *mac, uint8_t *fopts,
             ret += GNRC_LORAWAN_FOPT_REKEY_CONF_SIZE;
             cb = _mlme_rekey_check_conf;
             break;
+        case GNRC_LORAWAN_CID_LINK_ADR_REQ:
+            ret += GNRC_LORAWAN_FOPT_LINK_ADR_REQ_SIZE;
+            cb = _mlme_link_adr_req;
+            break;
         default:
             return;
         }
@@ -513,6 +527,10 @@ uint8_t gnrc_lorawan_build_options(gnrc_lorawan_t *mac, lorawan_buffer_t *buf)
     size_t size = 0;
     if (mac->mlme.pending_mlme_opts & GNRC_LORAWAN_MLME_OPTS_LINK_CHECK_REQ) {
         size += _fopts_mlme_link_check_req(buf);
+    }
+
+    if (mac->mlme.pending_mlme_opts & GNRC_LORAWAN_MLME_OPTS_REKEY_IND_REQ) {
+        size += _fopts_mlme_link_rekey_ind(buf);
     }
 
     if (mac->mlme.pending_mlme_opts & GNRC_LORAWAN_MLME_OPTS_LINK_ADR_ANS) {

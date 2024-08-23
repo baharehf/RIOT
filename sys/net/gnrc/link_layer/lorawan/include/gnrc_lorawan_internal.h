@@ -70,7 +70,8 @@ extern "C" {
 #define GNRC_LORAWAN_BACKOFF_BUDGET_3   (8700000LL)     /**< budget of time on air every 24 hours */
 
 #define GNRC_LORAWAN_MLME_OPTS_LINK_CHECK_REQ  (1 << 0) /**< Internal Link Check request flag */
-#define GNRC_LORAWAN_MLME_OPTS_LINK_ADR_ANS    (1 << 1) /**< Internal Link ADR Answer flag */
+#define GNRC_LORAWAN_MLME_OPTS_REKEY_IND_REQ   (1 << 1) /**< Internal Rekey Indication flag */
+#define GNRC_LORAWAN_MLME_OPTS_LINK_ADR_ANS    (1 << 2) /**< Internal Link ADR Answer flag */
 
 #define GNRC_LORAWAN_CID_SIZE (1U)                      /**< size of Command ID in FOps */
 #define GNRC_LORAWAN_CID_LINK_ADR_ANS_SIZE (2U)         /**< size of Link ADR Answer CID in FOps */
@@ -83,6 +84,7 @@ extern "C" {
 #define GNCR_LORAWAN_CID_REKEY_CONF (0x0B)              /**< Reykey Confirmation CID */
 
 #define GNRC_LORAWAN_FOPT_LINK_CHECK_ANS_SIZE (3U)      /**< size of Link check answer */
+#define GNRC_LORAWAN_FOPT_REKEY_CONF_SIZE     (2U)      /**< size of Rekey confirmation */
 #define GNRC_LORAWAN_FOPT_LINK_ADR_REQ_SIZE   (5U)      /**< size of Link ADR Request (LinkADRReq) */
 
 #define GNRC_LORAWAN_JOIN_DELAY_U32_MASK (0x1FFFFF)     /**< mask for detecting overflow in frame counter */
