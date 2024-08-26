@@ -92,7 +92,7 @@ int gnrc_netif_create(gnrc_netif_t *netif, char *stack, int stacksize,
     mutex_init(&ctx.init_done);
     mutex_lock(&ctx.init_done);
 
-    res = thread_create(stack, stacksize, priority, THREAD_CREATE_STACKTEST,
+    res = thread_create(stack, stacksize, priority, 0,
                         _gnrc_netif_thread, &ctx, name);
     assert(res > 0);
     (void)res;
@@ -2061,7 +2061,8 @@ static void _event_cb(netdev_t *dev, netdev_event_t event)
 #if IS_USED(MODULE_NETDEV_NEW_API)
     else if (gnrc_netif_netdev_new_api(netif)
              && (event == NETDEV_EVENT_TX_COMPLETE)) {
-        event_post(&netif->evq, &netif->event_tx_done);
+        event_post(&netif->evq[GNRC_NETIF_EVQ_INDEX_PRIO_LOW],
+                   &netif->event_tx_done);
     }
 #endif
     else {

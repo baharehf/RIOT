@@ -67,7 +67,7 @@ int gnrc_lorawan_set_tx_power(gnrc_lorawan_t *mac, uint8_t tx_pwr)
     }
     DEBUG("gnrc_lorawan_region: TX Power index: %u \n",tx_pwr);
 
-    int tx_pwr_db = GNRC_LORAWAN_TX_POWER_MAX - (tx_pwr * 2);
+    int16_t tx_pwr_db = GNRC_LORAWAN_TX_POWER_MAX - (tx_pwr * 2);
     return dev->driver->set(dev, NETOPT_TX_POWER, &tx_pwr_db, sizeof(tx_pwr_db));
 }
 

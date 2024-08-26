@@ -626,6 +626,18 @@ ssize_t coap_reply_simple(coap_pkt_t *pkt,
     return header_len + payload_len;
 }
 
+ssize_t coap_build_empty_ack(coap_pkt_t *pkt, coap_hdr_t *ack)
+{
+    if (coap_get_type(pkt) != COAP_TYPE_CON) {
+        return 0;
+    }
+
+    coap_build_hdr(ack, COAP_TYPE_ACK, NULL, 0,
+                   COAP_CODE_EMPTY, ntohs(pkt->hdr->id));
+
+    return sizeof(*ack);
+}
+
 ssize_t coap_build_reply(coap_pkt_t *pkt, unsigned code,
                          uint8_t *rbuf, unsigned rlen, unsigned payload_len)
 {
@@ -675,9 +687,6 @@ ssize_t coap_build_reply(coap_pkt_t *pkt, unsigned code,
 
     coap_build_hdr((coap_hdr_t *)rbuf, type, coap_get_token(pkt), tkl, code,
                    ntohs(pkt->hdr->id));
-    coap_hdr_set_type((coap_hdr_t *)rbuf, type);
-    coap_hdr_set_code((coap_hdr_t *)rbuf, code);
-
     len += payload_len;
 
     return len;
@@ -1454,4 +1463,14 @@ uint32_t coap_request_ctx_get_tl_type(const coap_request_ctx_t *ctx)
 const sock_udp_ep_t *coap_request_ctx_get_remote_udp(const coap_request_ctx_t *ctx)
 {
     return ctx->remote;
+}
+
+const sock_udp_ep_t *coap_request_ctx_get_local_udp(const coap_request_ctx_t *ctx)
+{
+#if defined(MODULE_SOCK_AUX_LOCAL)
+    return ctx->local;
+#else
+    (void)ctx;
+    return NULL;
+#endif
 }
