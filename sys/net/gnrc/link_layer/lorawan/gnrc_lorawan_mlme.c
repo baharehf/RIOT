@@ -27,7 +27,7 @@
 
 #include "net/lorawan/hdr.h"
 
-#define ENABLE_DEBUG 0
+#define ENABLE_DEBUG 1
 #include "debug.h"
 
 static void _build_join_req_pkt(uint8_t *joineui, uint8_t *deveui,
@@ -362,14 +362,6 @@ static int _mlme_link_adr_req(gnrc_lorawan_t *mac, const uint8_t *p, size_t len,
     int consumed_bytes = 0;
     assert(p[index] == GNRC_LORAWAN_CID_LINK_ADR_REQ);
 
-    /* Check whether this is the first block. */
-    if (mac->mlme.adr_flags & 0x8) {
-        /* Indicate error */
-        return 0;
-    }
-
-    /* Mark the first contiguous block */
-    mac->mlme.adr_flags |= 0x8;
     uint8_t c = index;
     while (c < len) {
         if (p[c] == GNRC_LORAWAN_CID_LINK_ADR_REQ) {
