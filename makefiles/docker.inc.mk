@@ -1,13 +1,14 @@
 # This *MUST* be updated in lock-step with the riotbuild image in
 # https://github.com/RIOT-OS/riotdocker. The idea is that when checking out
 # a random RIOT merge commit, `make BUILD_IN_DOCKER=1` should always succeed.
-DOCKER_TESTED_IMAGE_ID := f5951bc41dfface6cac869181d703e62cbdd3b7976b0946130a38f2e658000b3
-DOCKER_TESTED_IMAGE_REPO_DIGEST := 75dec511ba26424987a26bdee5ac2f94d5f4928d79b627d1620b9d2391aab3e1
+#
+# When the docker image is updated, checks at
+# dist/tools/buildsystem_sanity_check/check.sh start complaining in CI, and
+# provide the latest values to verify and fill in.
+DOCKER_TESTED_IMAGE_REPO_DIGEST := 045fd7eb54ccba2d5f4c06e8619bb1d5cd20ef96da8c6d4b7c1f9127e70adfff
 
 DOCKER_PULL_IDENTIFIER := docker.io/riot/riotbuild@sha256:$(DOCKER_TESTED_IMAGE_REPO_DIGEST)
-DOCKER_IMAGE_DEFAULT := sha256:$(DOCKER_TESTED_IMAGE_ID)
-DOCKER_AUTO_PULL ?= 1
-export DOCKER_IMAGE ?= $(DOCKER_IMAGE_DEFAULT)
+export DOCKER_IMAGE ?= $(DOCKER_PULL_IDENTIFIER)
 export DOCKER_BUILD_ROOT ?= /data/riotbuild
 DOCKER_RIOTBASE ?= $(DOCKER_BUILD_ROOT)/riotbase
 
@@ -33,25 +34,6 @@ ifneq (,$(wildcard /.dockerinit /.dockerenv))
   export INSIDE_DOCKER := 1
 else
   export INSIDE_DOCKER := 0
-endif
-
-ifeq (0:1,$(INSIDE_DOCKER):$(BUILD_IN_DOCKER))
-  ifeq ($(DOCKER_IMAGE),$(DOCKER_IMAGE_DEFAULT))
-    IMAGE_PRESENT:=$(shell $(DOCKER) image inspect $(DOCKER_IMAGE) 2>/dev/null >/dev/null && echo 1 || echo 0)
-    ifeq (0,$(IMAGE_PRESENT))
-      $(warning Required docker image $(DOCKER_IMAGE) not installed)
-      ifeq (1,$(DOCKER_AUTO_PULL))
-        $(info Pulling required image automatically. You can disable this with DOCKER_AUTO_PULL=0)
-        DEPS_FOR_RUNNING_DOCKER += docker-pull
-      else
-        $(info Building with latest available riotbuild image. You can pull the correct image automatically with DOCKER_AUTO_PULL=1)
-        # The currently set DOCKER_IMAGE is not locally available, and the
-        # user opted out to automatically pull it. Fall back to the
-        # latest (locally) available riot/riotbuild image instead.
-        export DOCKER_IMAGE := docker.io/riot/riotbuild:latest
-      endif
-    endif
-  endif
 endif
 
 # Default target for building inside a Docker container if nothing was given
@@ -159,6 +141,9 @@ _docker_is_podman = $(shell $(DOCKER) --version | grep podman 2>/dev/null)
 DOCKER_USER ?= $$(id -u)
 DOCKER_USER_OPT = $(if $(_docker_is_podman),--userns keep-id,--user $(DOCKER_USER))
 DOCKER_RUN_FLAGS ?= --rm --tty $(DOCKER_USER_OPT)
+
+# Explicitly set the platform to what the image is expecting
+DOCKER_RUN_FLAGS += --platform linux/amd64
 
 # allow setting make args from command line like '-j'
 DOCKER_MAKE_ARGS ?=
@@ -373,11 +358,6 @@ docker_run_make = \
 	$3 \
 	-w '$(DOCKER_APPDIR)' '$2' \
 	$(MAKE) $(DOCKER_OVERRIDE_CMDLINE) $4 $1
-
-# This target pulls the docker image required for BUILD_IN_DOCKER
-.PHONY: docker-pull
-docker-pull:
-	$(DOCKER) pull '$(DOCKER_PULL_IDENTIFIER)'
 
 # This will execute `make $(DOCKER_MAKECMDGOALS)` inside a Docker container.
 # We do not push the regular $(MAKECMDGOALS) to the container's make command in

@@ -184,7 +184,7 @@ int coap_parse(coap_pkt_t *pkt, uint8_t *buf, size_t len)
     return 0;
 }
 
-int coap_match_path(const coap_resource_t *resource, uint8_t *uri)
+int coap_match_path(const coap_resource_t *resource, const uint8_t *uri)
 {
     assert(resource && uri);
     int res;
@@ -558,6 +558,13 @@ ssize_t coap_build_reply_header(coap_pkt_t *pkt, unsigned code,
                  ? COAP_TYPE_ACK
                  : COAP_TYPE_NON;
 
+    if (IS_USED(MODULE_NANOCOAP_TOKEN_EXT)) {
+        /* Worst case: 2 byte extended token length field.
+         * See https://www.rfc-editor.org/rfc/rfc8974#name-extended-token-length-tkl-f
+         */
+        hdr_len += 2;
+    }
+
     if (hdr_len > len) {
         return -ENOBUFS;
     }
@@ -583,6 +590,13 @@ ssize_t coap_build_reply_header(coap_pkt_t *pkt, unsigned code,
                 return 0;
             }
         }
+    }
+
+    if (IS_USED(MODULE_NANOCOAP_TOKEN_EXT)) {
+        /* we need to update the header length with the actual one, as we may
+         * have used less bytes for the extended token length fields as our
+         * worst case assumption */
+        hdr_len  = bufpos - (uint8_t *)buf;
     }
 
     if (payload) {
@@ -724,8 +738,16 @@ ssize_t coap_build_hdr(coap_hdr_t *hdr, unsigned type, const void *token,
         memcpy(hdr + 1, &tkl_ext, tkl_ext_len);
     }
 
-    if (token_len) {
-        memcpy(coap_hdr_data_ptr(hdr), token, token_len);
+    /* Some users build a response packet in the same buffer that contained
+     * the request. In this case, the argument token already points inside
+     * the target, or more specifically, it is already at the correct place.
+     * Having `src` and `dest` in `memcpy(dest, src, len)` overlap is
+     * undefined behavior, so have to treat this explicitly. We could use
+     * memmove(), but we know that either `src` and `dest` do not overlap
+     * at all, or fully. So we can be a bit more efficient here. */
+    void *token_dest = coap_hdr_data_ptr(hdr);
+    if (token_dest != token) {
+        memcpy(token_dest, token, token_len);
     }
 
     return sizeof(coap_hdr_t) + token_len + tkl_ext_len;
@@ -1339,6 +1361,11 @@ bool coap_block_finish(coap_block_slicer_t *slicer, uint16_t option)
     uint32_t blkopt = _slicer2blkopt(slicer, more);
     size_t olen = _encode_uint(&blkopt);
 
+    /* ensure that we overwrite the dummy value set by coap_block2_init() */
+    if (!olen) {
+        olen = 1;
+    }
+
     coap_put_option(slicer->opt, option - delta, option, (uint8_t *)&blkopt, olen);
     return more;
 }
@@ -1402,7 +1429,7 @@ ssize_t coap_well_known_core_default_handler(coap_pkt_t *pkt, uint8_t *buf, \
     (void)context;
     coap_block_slicer_t slicer;
     coap_block2_init(pkt, &slicer);
-    uint8_t *payload = buf + coap_get_total_hdr_len(pkt);
+    uint8_t *payload = buf + coap_get_response_hdr_len(pkt);
     uint8_t *bufpos = payload;
     bufpos += coap_put_option_ct(bufpos, 0, COAP_FORMAT_LINK);
     bufpos += coap_opt_put_block2(bufpos, COAP_OPT_CONTENT_FORMAT, &slicer, 1);

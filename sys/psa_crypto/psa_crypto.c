@@ -1019,6 +1019,11 @@ static psa_status_t psa_validate_unstructured_key_size(psa_key_type_t type, size
             return PSA_ERROR_INVALID_ARGUMENT;
         }
         break;
+    case PSA_KEY_TYPE_CHACHA20:
+        if (bits != 256) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        break;
     default:
         (void)bits;
         return PSA_ERROR_NOT_SUPPORTED;
@@ -1132,6 +1137,15 @@ static psa_status_t psa_start_key_creation(psa_key_creation_method_t method,
     }
     slot = *p_slot;
     slot->attr = *attributes;
+
+    /* See 9.5.2. Key usage flags */
+    if (slot->attr.policy.usage & PSA_KEY_USAGE_SIGN_HASH) {
+        slot->attr.policy.usage |= PSA_KEY_USAGE_SIGN_MESSAGE;
+    }
+
+    if (slot->attr.policy.usage & PSA_KEY_USAGE_VERIFY_HASH) {
+        slot->attr.policy.usage |= PSA_KEY_USAGE_VERIFY_MESSAGE;
+    }
 
     if (PSA_KEY_LIFETIME_IS_VOLATILE(slot->attr.lifetime)) {
         slot->attr.id = key_id;
@@ -1539,7 +1553,6 @@ psa_status_t psa_builtin_import_key(const psa_key_attributes_t *attributes,
 
     if (PSA_KEY_TYPE_IS_UNSTRUCTURED(type)) {
         *bits = PSA_BYTES_TO_BITS(data_length);
-
         status = psa_validate_unstructured_key_size(type, *bits);
         if (status != PSA_SUCCESS) {
             return status;

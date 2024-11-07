@@ -110,10 +110,13 @@
  * Start with coap_block2_init() to read the client request and initialize a
  * coap_slicer_t struct with the size and location for this slice of the
  * overall payload. Then write the block2 option in the response with
- * coap_opt_put_block2(). The option includes an indicator ("more") that a
- * slice completes the overall payload transfer. You may not know the value for
- * _more_ at this point, but you must initialize the space in the packet for
- * the option before writing the payload. The option is rewritten later.
+ * coap_opt_put_block2(). Use @ref coap_get_response_hdr_len to get the length
+ * of the response header: This will be the offset in the buffer where you
+ * should start adding options. The Block2 option includes an indicator
+ * ("more") that a slice completes the overall payload transfer. You may not
+ * know the value for _more_ at this point, but you must initialize the space
+ * in the packet for the option before writing the payload. The option is
+ * rewritten later.
  *
  * Next, use the coap_blockwise_put_xxx() functions to write the payload
  * content. These functions use the coap_block_slicer_t to enable or disable
@@ -384,10 +387,24 @@ static inline void nanocoap_sock_close(nanocoap_sock_t *sock)
  * @param[in]   len     length of @p buffer
  *
  * @returns     length of response payload on success
- * @returns     <0 on error
+ * @returns     @see nanocoap_sock_request_cb on error
  */
 ssize_t nanocoap_sock_get(nanocoap_sock_t *sock, const char *path, void *buf,
                           size_t len);
+
+/**
+ * @brief   Simple non-confirmable GET
+ *
+ * @param[in]   sock    socket to use for the request
+ * @param[in]   path    remote path and query
+ * @param[out]  response buffer for the response, may be NULL
+ * @param[in]   len_max length of @p response
+ *
+ * @returns     length of response payload on success
+ * @returns     @see nanocoap_sock_request_cb on error
+ */
+ssize_t nanocoap_sock_get_non(nanocoap_sock_t *sock, const char *path,
+                              void *response, size_t len_max);
 
 /**
  * @brief   Simple synchronous CoAP (confirmable) PUT
@@ -400,7 +417,7 @@ ssize_t nanocoap_sock_get(nanocoap_sock_t *sock, const char *path, void *buf,
  * @param[in]   len_max length of @p response
  *
  * @returns     length of response payload on success
- * @returns     <0 on error
+ * @returns     @see nanocoap_sock_request_cb on error
  */
 ssize_t nanocoap_sock_put(nanocoap_sock_t *sock, const char *path,
                           const void *request, size_t len,
@@ -419,7 +436,7 @@ ssize_t nanocoap_sock_put(nanocoap_sock_t *sock, const char *path,
  * @returns     length of response payload on success
  * @returns     0 if the request was sent and no response buffer was provided,
  *              independently of success (because no response is requested in that case)
- * @returns     <0 on error
+ * @returns     @see nanocoap_sock_request_cb on error
  */
 ssize_t nanocoap_sock_put_non(nanocoap_sock_t *sock, const char *path,
                               const void *request, size_t len,
@@ -452,7 +469,7 @@ ssize_t nanocoap_sock_put_url(const char *url,
  * @param[in]   len_max length of @p response
  *
  * @returns     length of response payload on success
- * @returns     <0 on error
+ * @returns     @see nanocoap_sock_request_cb on error
  */
 ssize_t nanocoap_sock_post(nanocoap_sock_t *sock, const char *path,
                            const void *request, size_t len,
@@ -471,7 +488,7 @@ ssize_t nanocoap_sock_post(nanocoap_sock_t *sock, const char *path,
  * @returns     length of response payload on success
  * @returns     0 if the request was sent and no response buffer was provided,
  *              independently of success (because no response is requested in that case)
- * @returns     <0 on error
+ * @returns     @see nanocoap_sock_request_cb on error
  */
 ssize_t nanocoap_sock_post_non(nanocoap_sock_t *sock, const char *path,
                                const void *request, size_t len,
@@ -505,7 +522,7 @@ ssize_t nanocoap_sock_post_url(const char *url,
  * @param[in]   len_max length of @p response
  *
  * @returns     length of response payload on success
- * @returns     <0 on error
+ * @returns     @see nanocoap_sock_request_cb on error
  */
 ssize_t nanocoap_sock_fetch(nanocoap_sock_t *sock, const char *path,
                             const void *request, size_t len,
@@ -525,7 +542,7 @@ ssize_t nanocoap_sock_fetch(nanocoap_sock_t *sock, const char *path,
  * @returns     length of response payload on success
  * @returns     0 if the request was sent and no response buffer was provided,
  *              independently of success (because no response is requested in that case)
- * @returns     <0 on error
+ * @returns     @see nanocoap_sock_request_cb on error
  */
 ssize_t nanocoap_sock_fetch_non(nanocoap_sock_t *sock, const char *path,
                                 const void *request, size_t len,
@@ -555,7 +572,7 @@ ssize_t nanocoap_sock_fetch_url(const char *url,
  * @param[in]   path    remote path (with query) to delete
  *
  * @returns     0 on success
- * @returns     <0 on error
+ * @returns     @see nanocoap_sock_request_cb on error
  */
 ssize_t nanocoap_sock_delete(nanocoap_sock_t *sock, const char *path);
 
@@ -702,7 +719,15 @@ ssize_t nanocoap_sock_request(nanocoap_sock_t *sock, coap_pkt_t *pkt, size_t len
  * @param[in]       arg     Optional callback argumnent
  *
  * @returns     length of response on success
- * @returns     <0 on error
+ * @returns     0 for a request for which no response is expected, indicated by @p cb == NULL,
+ *              or for a 2.xx response
+ * @returns     -ETIMEDOUT, if no matching ACK or no response was received
+ * @returns     -EBADMSG, if a matching RST was received
+ * @returns     -ENXIO, if @p cb == NULL and the response indicates a 4.xx client error
+ * @returns     -ENETRESET, if @p cb == NULL and the response indicates a 5.xx server error
+ * @returns     any error on @see sock_udp_sendv or @see sock_dtls_sendv
+ * @returns     any error on @see sock_udp_recv_buf or @see sock_dtls_recv_buf
+ * @returns     any return value of @p cb for a matching response
  */
 ssize_t nanocoap_sock_request_cb(nanocoap_sock_t *sock, coap_pkt_t *pkt,
                                  coap_request_cb_t cb, void *arg);
@@ -718,7 +743,7 @@ ssize_t nanocoap_sock_request_cb(nanocoap_sock_t *sock, coap_pkt_t *pkt,
  *                          request
  *
  * @returns     length of response on success
- * @returns     <0 on error
+ * @returns     @see nanocoap_sock_request_cb on error
  */
 ssize_t nanocoap_request(coap_pkt_t *pkt, const sock_udp_ep_t *local,
                          const sock_udp_ep_t *remote, size_t len);
